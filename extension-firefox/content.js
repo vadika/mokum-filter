@@ -121,6 +121,24 @@ function extractAuthorInfo(commentEl) {
     if (!info.username && linkText) info.username = linkText;
     break;
   }
+  if (!info.username) {
+    // Fallback: some expanded comments only show author inside comment text.
+    const textLinks = Array.from(rest.querySelectorAll(`${COMMENT_TEXT_SELECTOR} a[href]`));
+    for (const link of textLinks) {
+      let url;
+      try {
+        url = new URL(link.getAttribute('href'), window.location.origin);
+      } catch (err) {
+        continue;
+      }
+      if (url.origin !== window.location.origin) continue;
+      if (!isUserPath(url.pathname)) continue;
+      const linkText = link.textContent ? link.textContent.trim() : '';
+      if (linkText && !linkText.startsWith('@')) continue;
+      info.username = url.pathname.slice(1);
+      break;
+    }
+  }
   return info;
 }
 
