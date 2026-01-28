@@ -3,6 +3,7 @@
 const ext = typeof browser !== 'undefined' ? browser : chrome;
 const BLOCKLIST_KEY = 'blockedUsers';
 const DISPLAY_BLOCKLIST_KEY = 'blockedDisplayNames';
+const AUTO_MAP_KEY = 'autoMapUsernames';
 const HIDDEN_CLASS = 'mokum-comment-filter-hidden';
 const COMMENT_SELECTOR = '.bem-post__comment';
 const COMMENT_REST_SELECTOR = '.bem-post__comment-rest';
@@ -11,6 +12,7 @@ const COMMENT_TEXT_SELECTOR = '.bem-post__comment-text';
 const storage = ext.storage && ext.storage.sync ? ext.storage.sync : ext.storage.local;
 let blockedUsers = new Set();
 let blockedDisplayNames = new Set();
+let autoMapUsernames = false;
 let notifyTimer = null;
 let applyTimer = null;
 const displayNameCache = new Map();
@@ -33,6 +35,17 @@ function cacheDisplayName(username, displayName) {
   if (!normalizedUsername) return;
   const normalizedDisplayName = displayName ? normalizeDisplayName(displayName) : '';
   displayNameCache.set(normalizedUsername, normalizedDisplayName || null);
+}
+
+function addUsernameToBlocklist(username) {
+  const normalized = normalizeUsername(username);
+  if (!normalized || blockedUsers.has(normalized)) return;
+  blockedUsers.add(normalized);
+  const payload = { [BLOCKLIST_KEY]: Array.from(blockedUsers).sort() };
+  const maybePromise = storage.set(payload, () => {});
+  if (maybePromise && typeof maybePromise.then === 'function') {
+    maybePromise.then(() => {});
+  }
 }
 
 function getApiOrigin() {
@@ -328,6 +341,15 @@ function applyBlocklistToComments(root) {
       (normalizedUsername && blockedUsers.has(normalizedUsername)) ||
       (normalizedDisplayName && blockedDisplayNames.has(normalizedDisplayName));
     commentEl.classList.toggle(HIDDEN_CLASS, shouldHide);
+    if (
+      shouldHide &&
+      autoMapUsernames &&
+      normalizedDisplayName &&
+      normalizedUsername &&
+      !blockedUsers.has(normalizedUsername)
+    ) {
+      addUsernameToBlocklist(normalizedUsername);
+    }
   });
   scheduleBlockedCountUpdate();
 }
@@ -342,12 +364,13 @@ function scheduleBlockedCountUpdate() {
 
 function loadBlocklist() {
   return new Promise((resolve) => {
-    const maybePromise = storage.get([BLOCKLIST_KEY, DISPLAY_BLOCKLIST_KEY], (result) => {
+    const maybePromise = storage.get([BLOCKLIST_KEY, DISPLAY_BLOCKLIST_KEY, AUTO_MAP_KEY], (result) => {
       if (result) {
         const list = Array.isArray(result[BLOCKLIST_KEY]) ? result[BLOCKLIST_KEY] : [];
         const displayList = Array.isArray(result[DISPLAY_BLOCKLIST_KEY]) ? result[DISPLAY_BLOCKLIST_KEY] : [];
         blockedUsers = new Set(list.map(normalizeUsername).filter(Boolean));
         blockedDisplayNames = new Set(displayList.map(normalizeDisplayName).filter(Boolean));
+        autoMapUsernames = Boolean(result[AUTO_MAP_KEY]);
         resolve();
       }
     });
@@ -357,6 +380,7 @@ function loadBlocklist() {
         const displayList = Array.isArray(result[DISPLAY_BLOCKLIST_KEY]) ? result[DISPLAY_BLOCKLIST_KEY] : [];
         blockedUsers = new Set(list.map(normalizeUsername).filter(Boolean));
         blockedDisplayNames = new Set(displayList.map(normalizeDisplayName).filter(Boolean));
+        autoMapUsernames = Boolean(result[AUTO_MAP_KEY]);
         resolve();
       });
     }
@@ -450,6 +474,9 @@ function init() {
         ? changes[DISPLAY_BLOCKLIST_KEY].newValue
         : [];
       blockedDisplayNames = new Set(newList.map(normalizeDisplayName).filter(Boolean));
+    }
+    if (changes[AUTO_MAP_KEY]) {
+      autoMapUsernames = Boolean(changes[AUTO_MAP_KEY].newValue);
     }
     applyBlocklistToComments(document);
   });

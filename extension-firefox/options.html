@@ -52,6 +52,12 @@
     <p style="margin-top:16px;">Optional: block by display name (exact match, case-insensitive).</p>
     <textarea id="blockedDisplayNames" placeholder="e.g.&#10;Хичи&#10;Another Display Name"></textarea>
     <div class="row">
+      <label>
+        <input type="checkbox" id="autoMapUsernames">
+        Add username automatically when display name is matched
+      </label>
+    </div>
+    <div class="row">
       <button id="save">Save</button>
       <span id="status" aria-live="polite"></span>
     </div>
