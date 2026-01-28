@@ -87,7 +87,12 @@ function buildStoreMaps() {
       commentIdToUserId.set(String(comment.id), String(comment.user_id));
     });
   });
-  return { commentIdToUserId, userIdToDisplayName, userIdToName, usernameToDisplayName };
+  return {
+    commentIdToUserId,
+    userIdToDisplayName,
+    userIdToName,
+    usernameToDisplayName
+  };
 }
 
 function extractAuthorInfo(commentEl) {
