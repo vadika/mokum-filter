@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Mokum Comment Filter</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      body {
+        font-family: Arial, Helvetica, sans-serif;
+        margin: 24px;
+        max-width: 720px;
+      }
+      h1 {
+        font-size: 20px;
+        margin: 0 0 12px;
+      }
+      p {
+        margin: 8px 0;
+      }
+      textarea {
+        width: 100%;
+        min-height: 200px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        font-size: 13px;
+        padding: 10px;
+        box-sizing: border-box;
+      }
+      .row {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        margin-top: 12px;
+      }
+      button {
+        padding: 6px 12px;
+        font-size: 13px;
+        cursor: pointer;
+      }
+      #status {
+        color: #136e2f;
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Mokum Comment Filter</h1>
+    <p>Enter one username per line. Use either <code>username</code> or <code>@username</code>.</p>
+    <textarea id="blockedUsers" placeholder="e.g.&#10;annoying_user&#10;@another_user"></textarea>
+    <p style="margin-top:16px;">Optional: block by display name (exact match, case-insensitive).</p>
+    <textarea id="blockedDisplayNames" placeholder="e.g.&#10;Хичи&#10;Another Display Name"></textarea>
+    <div class="row">
+      <button id="save">Save</button>
+      <span id="status" aria-live="polite"></span>
+    </div>
+    <script src="options.js"></script>
+  </body>
+</html>

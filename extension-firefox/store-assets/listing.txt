@@ -1,0 +1,16 @@
+Name: Mokum Comment Filter
+Short description (up to 132 chars): Hide comments from selected users or display names on mokum.place.
+
+Detailed description:
+- Hide comments from selected usernames or display names on mokum.place.
+- Works on feed and post pages.
+- Filters dynamically loaded comments in real time.
+- Your blocklist is stored in Chrome sync/local storage.
+
+How to use:
+1) Install the extension.
+2) Open the Options page.
+3) Add usernames and/or display names (one per line).
+
+Privacy:
+This extension does not collect, transmit, or sell personal data. It stores your blocklist locally (or in Chrome sync, if enabled).
