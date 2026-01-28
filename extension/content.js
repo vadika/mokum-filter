@@ -12,6 +12,7 @@ const storage = ext.storage && ext.storage.sync ? ext.storage.sync : ext.storage
 let blockedUsers = new Set();
 let blockedDisplayNames = new Set();
 let notifyTimer = null;
+let applyTimer = null;
 
 function normalizeUsername(value) {
   if (!value) return '';
@@ -192,19 +193,37 @@ function injectStyles() {
 }
 
 function observeComments() {
+  const scheduleApply = (root) => {
+    if (applyTimer) clearTimeout(applyTimer);
+    applyTimer = setTimeout(() => applyBlocklistToComments(root || document), 50);
+  };
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
-      for (const node of mutation.addedNodes) {
-        if (!(node instanceof Element)) continue;
-        if (node.matches && node.matches(COMMENT_SELECTOR)) {
-          applyBlocklistToComments(node.parentElement || node);
-        } else if (node.querySelector && node.querySelector(COMMENT_SELECTOR)) {
-          applyBlocklistToComments(node);
+      if (mutation.type === 'childList') {
+        for (const node of mutation.addedNodes) {
+          if (!(node instanceof Element)) continue;
+          if (node.matches && node.matches(COMMENT_SELECTOR)) {
+            scheduleApply(node.parentElement || node);
+          } else if (node.querySelector && node.querySelector(COMMENT_SELECTOR)) {
+            scheduleApply(node);
+          }
+        }
+      } else if (mutation.type === 'attributes') {
+        const target = mutation.target;
+        if (!(target instanceof Element)) continue;
+        if (target.matches(COMMENT_SELECTOR) || target.closest('.bem-post__comments')) {
+          const postEl = target.closest('.bem-post[data-post-id]');
+          scheduleApply(postEl || target);
         }
       }
     }
   });
-  observer.observe(document.body, { childList: true, subtree: true });
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['class', 'style', 'hidden', 'aria-expanded']
+  });
 }
 
 function init() {
