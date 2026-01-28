@@ -35,6 +35,10 @@ function cacheDisplayName(username, displayName) {
   displayNameCache.set(normalizedUsername, normalizedDisplayName || null);
 }
 
+function getApiOrigin() {
+  return window.location.origin.replace('://www.', '://');
+}
+
 function fetchDisplayNameForUsername(username) {
   const normalizedUsername = normalizeUsername(username);
   if (!normalizedUsername) return Promise.resolve(null);
@@ -44,7 +48,9 @@ function fetchDisplayNameForUsername(username) {
   if (displayNamePending.has(normalizedUsername)) {
     return displayNamePending.get(normalizedUsername);
   }
-  const request = fetch(`/api/v1/users/${encodeURIComponent(normalizedUsername)}`, {
+  const request = fetch(
+    new URL(`/api/v1/users/${encodeURIComponent(normalizedUsername)}`, getApiOrigin()),
+    {
     credentials: 'same-origin',
     headers: { Accept: 'application/json' },
   })
@@ -107,7 +113,10 @@ function fetchCommentAuthor(commentEl, maps) {
     commentInfoCache.set(commentId, null);
     return Promise.resolve(null);
   }
-  const url = `/api/v1/posts/${encodeURIComponent(info.authorSlug)}/${encodeURIComponent(info.postId)}/comments/${encodeURIComponent(commentId)}`;
+  const url = new URL(
+    `/api/v1/posts/${encodeURIComponent(info.authorSlug)}/${encodeURIComponent(info.postId)}/comments/${encodeURIComponent(commentId)}`,
+    getApiOrigin()
+  );
   const request = fetch(url, {
     credentials: 'same-origin',
     headers: { Accept: 'application/json' },
