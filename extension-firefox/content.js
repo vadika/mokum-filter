@@ -370,7 +370,7 @@ function loadBlocklist() {
         const displayList = Array.isArray(result[DISPLAY_BLOCKLIST_KEY]) ? result[DISPLAY_BLOCKLIST_KEY] : [];
         blockedUsers = new Set(list.map(normalizeUsername).filter(Boolean));
         blockedDisplayNames = new Set(displayList.map(normalizeDisplayName).filter(Boolean));
-        autoMapUsernames = Boolean(result[AUTO_MAP_KEY]);
+        autoMapUsernames = result[AUTO_MAP_KEY] === undefined ? true : Boolean(result[AUTO_MAP_KEY]);
         resolve();
       }
     });
@@ -380,7 +380,7 @@ function loadBlocklist() {
         const displayList = Array.isArray(result[DISPLAY_BLOCKLIST_KEY]) ? result[DISPLAY_BLOCKLIST_KEY] : [];
         blockedUsers = new Set(list.map(normalizeUsername).filter(Boolean));
         blockedDisplayNames = new Set(displayList.map(normalizeDisplayName).filter(Boolean));
-        autoMapUsernames = Boolean(result[AUTO_MAP_KEY]);
+        autoMapUsernames = result[AUTO_MAP_KEY] === undefined ? true : Boolean(result[AUTO_MAP_KEY]);
         resolve();
       });
     }

@@ -28,7 +28,7 @@ function loadBlocklist() {
     if (result) {
       const list = Array.isArray(result[BLOCKLIST_KEY]) ? result[BLOCKLIST_KEY] : [];
       const displayList = Array.isArray(result[DISPLAY_BLOCKLIST_KEY]) ? result[DISPLAY_BLOCKLIST_KEY] : [];
-      const autoMap = Boolean(result[AUTO_MAP_KEY]);
+      const autoMap = result[AUTO_MAP_KEY] === undefined ? true : Boolean(result[AUTO_MAP_KEY]);
       textarea.value = list.join('\n');
       displayTextarea.value = displayList.join('\n');
       autoMapCheckbox.checked = autoMap;
@@ -38,7 +38,7 @@ function loadBlocklist() {
     maybePromise.then((result) => {
       const list = Array.isArray(result[BLOCKLIST_KEY]) ? result[BLOCKLIST_KEY] : [];
       const displayList = Array.isArray(result[DISPLAY_BLOCKLIST_KEY]) ? result[DISPLAY_BLOCKLIST_KEY] : [];
-      const autoMap = Boolean(result[AUTO_MAP_KEY]);
+      const autoMap = result[AUTO_MAP_KEY] === undefined ? true : Boolean(result[AUTO_MAP_KEY]);
       textarea.value = list.join('\n');
       displayTextarea.value = displayList.join('\n');
       autoMapCheckbox.checked = autoMap;
