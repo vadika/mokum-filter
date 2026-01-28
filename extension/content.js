@@ -13,6 +13,8 @@ let blockedUsers = new Set();
 let blockedDisplayNames = new Set();
 let notifyTimer = null;
 let applyTimer = null;
+const displayNameCache = new Map();
+const displayNamePending = new Map();
 
 function normalizeUsername(value) {
   if (!value) return '';
@@ -22,6 +24,44 @@ function normalizeUsername(value) {
 function normalizeDisplayName(value) {
   if (!value) return '';
   return value.trim().toLowerCase();
+}
+
+function cacheDisplayName(username, displayName) {
+  const normalizedUsername = normalizeUsername(username);
+  if (!normalizedUsername) return;
+  const normalizedDisplayName = displayName ? normalizeDisplayName(displayName) : '';
+  displayNameCache.set(normalizedUsername, normalizedDisplayName || null);
+}
+
+function fetchDisplayNameForUsername(username) {
+  const normalizedUsername = normalizeUsername(username);
+  if (!normalizedUsername) return Promise.resolve(null);
+  if (displayNameCache.has(normalizedUsername)) {
+    return Promise.resolve(displayNameCache.get(normalizedUsername));
+  }
+  if (displayNamePending.has(normalizedUsername)) {
+    return displayNamePending.get(normalizedUsername);
+  }
+  const request = fetch(`/api/v1/users/${encodeURIComponent(normalizedUsername)}`, {
+    credentials: 'same-origin',
+    headers: { Accept: 'application/json' },
+  })
+    .then((resp) => (resp.ok ? resp.json() : null))
+    .then((data) => {
+      const user = data && (data.user || data);
+      const displayName = user ? user.display_name || user.displayName || user.name : null;
+      cacheDisplayName(normalizedUsername, displayName);
+      return displayNameCache.get(normalizedUsername);
+    })
+    .catch(() => {
+      cacheDisplayName(normalizedUsername, null);
+      return null;
+    })
+    .finally(() => {
+      displayNamePending.delete(normalizedUsername);
+    });
+  displayNamePending.set(normalizedUsername, request);
+  return request;
 }
 
 function isUserPath(pathname) {
@@ -165,6 +205,18 @@ function applyBlocklistToComments(root) {
     }
     if (maps && username && !displayName) {
       displayName = maps.usernameToDisplayName.get(String(username).toLowerCase()) || displayName;
+    }
+    if (maps && username) {
+      const cachedFromStore = maps.usernameToDisplayName.get(String(username).toLowerCase());
+      if (cachedFromStore) cacheDisplayName(username, cachedFromStore);
+    }
+    if (!displayName && username && blockedDisplayNames.size > 0) {
+      const cached = displayNameCache.get(normalizeUsername(username));
+      if (cached === undefined) {
+        fetchDisplayNameForUsername(username).then(() => applyBlocklistToComments(commentEl));
+      } else if (cached) {
+        displayName = cached;
+      }
     }
     const normalizedUsername = normalizeUsername(username);
     const normalizedDisplayName = normalizeDisplayName(displayName);
