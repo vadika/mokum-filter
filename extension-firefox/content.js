@@ -15,6 +15,8 @@ let notifyTimer = null;
 let applyTimer = null;
 const displayNameCache = new Map();
 const displayNamePending = new Map();
+const commentInfoCache = new Map();
+const commentInfoPending = new Map();
 
 function normalizeUsername(value) {
   if (!value) return '';
@@ -61,6 +63,90 @@ function fetchDisplayNameForUsername(username) {
       displayNamePending.delete(normalizedUsername);
     });
   displayNamePending.set(normalizedUsername, request);
+  return request;
+}
+
+function parsePostInfo(postEl) {
+  if (!postEl) return null;
+  const postId = postEl.getAttribute('data-post-id') || null;
+  let href = null;
+  const link = postEl.querySelector('.bem-post__timestamp-link');
+  if (link) {
+    href = link.getAttribute('href');
+  } else {
+    const anchors = Array.from(postEl.querySelectorAll('a[href]'));
+    for (const anchor of anchors) {
+      const value = anchor.getAttribute('href');
+      if (value && postId && value.includes(`/${postId}`)) {
+        href = value;
+        break;
+      }
+    }
+  }
+  if (!href) return { postId };
+  try {
+    const url = new URL(href, window.location.origin);
+    const match = url.pathname.match(/^\/([^/]+)\/(\d+)/);
+    if (match) {
+      return { authorSlug: match[1], postId: match[2] || postId };
+    }
+  } catch (err) {
+    return { postId };
+  }
+  return { postId };
+}
+
+function fetchCommentAuthor(commentEl, maps) {
+  const commentId = extractCommentId(commentEl);
+  if (!commentId) return Promise.resolve(null);
+  if (commentInfoCache.has(commentId)) return Promise.resolve(commentInfoCache.get(commentId));
+  if (commentInfoPending.has(commentId)) return commentInfoPending.get(commentId);
+  const postEl = commentEl.closest('.bem-post[data-post-id]');
+  const info = parsePostInfo(postEl);
+  if (!info || !info.authorSlug || !info.postId) {
+    commentInfoCache.set(commentId, null);
+    return Promise.resolve(null);
+  }
+  const url = `/api/v1/posts/${encodeURIComponent(info.authorSlug)}/${encodeURIComponent(info.postId)}/comments/${encodeURIComponent(commentId)}`;
+  const request = fetch(url, {
+    credentials: 'same-origin',
+    headers: { Accept: 'application/json' },
+  })
+    .then((resp) => (resp.ok ? resp.json() : null))
+    .then((data) => {
+      const comment = data && (data.comment || data);
+      const userId = comment && (comment.user_id || comment.userId);
+      let username = null;
+      let displayName = null;
+      if (comment && comment.user) {
+        username = comment.user.name || username;
+        displayName = comment.user.display_name || comment.user.displayName || displayName;
+      }
+      if (comment) {
+        username = comment.username || username;
+        displayName = comment.display_name || comment.displayName || displayName;
+      }
+      if (userId && maps) {
+        username = username || maps.userIdToName.get(String(userId)) || null;
+        displayName = displayName || maps.userIdToDisplayName.get(String(userId)) || null;
+      }
+      const result = { username, displayName };
+      if (username || displayName) {
+        commentInfoCache.set(commentId, result);
+        if (username) cacheDisplayName(username, displayName);
+        return result;
+      }
+      commentInfoCache.set(commentId, null);
+      return null;
+    })
+    .catch(() => {
+      commentInfoCache.set(commentId, null);
+      return null;
+    })
+    .finally(() => {
+      commentInfoPending.delete(commentId);
+    });
+  commentInfoPending.set(commentId, request);
   return request;
 }
 
@@ -203,12 +289,21 @@ function applyBlocklistToComments(root) {
         displayName = displayName || maps.userIdToDisplayName.get(String(userId)) || null;
       }
     }
-    if (maps && username && !displayName) {
-      displayName = maps.usernameToDisplayName.get(String(username).toLowerCase()) || displayName;
-    }
     if (maps && username) {
       const cachedFromStore = maps.usernameToDisplayName.get(String(username).toLowerCase());
       if (cachedFromStore) cacheDisplayName(username, cachedFromStore);
+    }
+    if (maps && username && !displayName) {
+      displayName = maps.usernameToDisplayName.get(String(username).toLowerCase()) || displayName;
+    }
+    if (!username && maps && authorInfo.commentId) {
+      const cached = commentInfoCache.get(String(authorInfo.commentId));
+      if (cached === undefined) {
+        fetchCommentAuthor(commentEl, maps).then(() => applyBlocklistToComments(commentEl));
+      } else if (cached) {
+        username = cached.username || username;
+        displayName = cached.displayName || displayName;
+      }
     }
     if (!displayName && username && blockedDisplayNames.size > 0) {
       const cached = displayNameCache.get(normalizeUsername(username));
