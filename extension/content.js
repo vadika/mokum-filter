@@ -127,7 +127,12 @@ function extractAuthorInfo(commentEl) {
 function applyBlocklistToComments(root) {
   const scope = root || document;
   const maps = buildStoreMaps();
-  const comments = scope.querySelectorAll ? scope.querySelectorAll(COMMENT_SELECTOR) : [];
+  let comments = [];
+  if (scope.matches && scope.matches(COMMENT_SELECTOR)) {
+    comments = [scope];
+  } else if (scope.querySelectorAll) {
+    comments = Array.from(scope.querySelectorAll(COMMENT_SELECTOR));
+  }
   comments.forEach((commentEl) => {
     const authorInfo = extractAuthorInfo(commentEl);
     if (!authorInfo) return;
@@ -202,8 +207,11 @@ function observeComments() {
       if (mutation.type === 'childList') {
         for (const node of mutation.addedNodes) {
           if (!(node instanceof Element)) continue;
-          if (node.matches && node.matches(COMMENT_SELECTOR)) {
-            scheduleApply(node.parentElement || node);
+          const directComment = node.matches && node.matches(COMMENT_SELECTOR) ? node : null;
+          const parentComment = !directComment && node.closest ? node.closest(COMMENT_SELECTOR) : null;
+          const commentEl = directComment || parentComment;
+          if (commentEl) {
+            scheduleApply(commentEl);
           } else if (node.querySelector && node.querySelector(COMMENT_SELECTOR)) {
             scheduleApply(node);
           }
@@ -211,7 +219,14 @@ function observeComments() {
       } else if (mutation.type === 'attributes') {
         const target = mutation.target;
         if (!(target instanceof Element)) continue;
-        if (target.matches(COMMENT_SELECTOR) || target.closest('.bem-post__comments')) {
+        const commentEl = target.matches(COMMENT_SELECTOR)
+          ? target
+          : target.closest
+            ? target.closest(COMMENT_SELECTOR)
+            : null;
+        if (commentEl) {
+          scheduleApply(commentEl);
+        } else if (target.closest('.bem-post__comments')) {
           const postEl = target.closest('.bem-post[data-post-id]');
           scheduleApply(postEl || target);
         }
