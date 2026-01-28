@@ -123,43 +123,20 @@ function extractAuthorInfo(commentEl) {
   }
   if (!info.username) {
     // Fallback: some expanded comments only show author inside comment text.
-    const commentText = rest.querySelector(COMMENT_TEXT_SELECTOR);
-    if (commentText) {
-      const link = commentText.querySelector('a[href]');
-      if (link) {
-        let url;
-        try {
-          url = new URL(link.getAttribute('href'), window.location.origin);
-        } catch (err) {
-          url = null;
-        }
-        if (url && url.origin === window.location.origin && isUserPath(url.pathname)) {
-          const linkText = link.textContent ? link.textContent.trim() : '';
-          const hasAt = linkText.startsWith('@');
-          let prefixOk = true;
-          for (const node of commentText.childNodes) {
-            if (node === link) break;
-            if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
-              prefixOk = false;
-              break;
-            }
-            if (node.nodeType === Node.ELEMENT_NODE && node.textContent.trim()) {
-              prefixOk = false;
-              break;
-            }
-          }
-          let suffixOk = false;
-          const next = link.nextSibling;
-          if (next && next.nodeType === Node.TEXT_NODE) {
-            suffixOk = next.textContent.trimStart().startsWith(':');
-          } else if (next && next.nodeType === Node.ELEMENT_NODE) {
-            suffixOk = next.textContent.trimStart().startsWith(':');
-          }
-          if (hasAt && prefixOk && suffixOk) {
-            info.username = url.pathname.slice(1);
-          }
-        }
+    const textLinks = Array.from(rest.querySelectorAll(`${COMMENT_TEXT_SELECTOR} a[href]`));
+    for (const link of textLinks) {
+      let url;
+      try {
+        url = new URL(link.getAttribute('href'), window.location.origin);
+      } catch (err) {
+        continue;
       }
+      if (url.origin !== window.location.origin) continue;
+      if (!isUserPath(url.pathname)) continue;
+      const linkText = link.textContent ? link.textContent.trim() : '';
+      if (linkText && !linkText.startsWith('@')) continue;
+      info.username = url.pathname.slice(1);
+      break;
     }
   }
   return info;
