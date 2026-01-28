@@ -18,6 +18,23 @@ function updateAction(tabId, count) {
   });
 }
 
+function openOptions() {
+  if (ext.runtime && typeof ext.runtime.openOptionsPage === 'function') {
+    ext.runtime.openOptionsPage();
+    return;
+  }
+  if (ext.runtime && typeof ext.runtime.getURL === 'function' && ext.tabs) {
+    ext.tabs.create({ url: ext.runtime.getURL('options.html') });
+  }
+}
+
+const action = ext.browserAction || ext.action;
+if (action && action.onClicked) {
+  action.onClicked.addListener(() => {
+    openOptions();
+  });
+}
+
 ext.runtime.onMessage.addListener((message, sender) => {
   if (!message || message.type !== 'blockedCount') return;
   const tabId = sender.tab && sender.tab.id;
