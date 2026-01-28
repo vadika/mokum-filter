@@ -1,0 +1,66 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect version bump
+        id: version
+        run: |
+          set -euo pipefail
+          version="$(jq -r .version extension/manifest.json)"
+          firefox_version="$(jq -r .version extension-firefox/manifest.json)"
+          if [ "$version" != "$firefox_version" ]; then
+            echo "Version mismatch: chrome=$version firefox=$firefox_version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          changed=true
+          if git rev-parse HEAD^ >/dev/null 2>&1; then
+            prev_version="$(git show HEAD^:extension/manifest.json | jq -r .version || echo "")"
+            if [ "$prev_version" = "$version" ]; then
+              changed=false
+            fi
+          fi
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+
+      - name: Build zips
+        if: steps.version.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          rm -f extension.zip extension-firefox.zip
+          (cd extension && zip -r ../extension.zip .)
+          (cd extension-firefox && zip -r ../extension-firefox.zip .)
+
+      - name: Upload build artifacts
+        if: steps.version.outputs.changed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mokum-comment-filter-${{ steps.version.outputs.version }}
+          path: |
+            extension.zip
+            extension-firefox.zip
+
+      - name: Create GitHub release
+        if: steps.version.outputs.changed == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          files: |
+            extension.zip
+            extension-firefox.zip
