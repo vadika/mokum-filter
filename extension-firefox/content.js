@@ -226,10 +226,28 @@ function observeComments() {
   });
 }
 
+function hookMoreComments() {
+  document.addEventListener(
+    'click',
+    (event) => {
+      const trigger = event.target.closest && event.target.closest('.bem-post__more-comments');
+      if (!trigger) return;
+      const postEl = trigger.closest('.bem-post[data-post-id]');
+      const scope = postEl || document;
+      // Re-apply after likely async expansion.
+      setTimeout(() => applyBlocklistToComments(scope), 100);
+      setTimeout(() => applyBlocklistToComments(scope), 600);
+      setTimeout(() => applyBlocklistToComments(scope), 1500);
+    },
+    true
+  );
+}
+
 function init() {
   injectStyles();
   loadBlocklist().then(() => applyBlocklistToComments(document));
   observeComments();
+  hookMoreComments();
   ext.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== 'sync' && areaName !== 'local') return;
     if (changes[BLOCKLIST_KEY]) {
