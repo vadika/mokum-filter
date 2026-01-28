@@ -24,7 +24,7 @@
     "gecko": {
       "id": "mokum-comment-filter@vadikas",
       "data_collection_permissions": {
-        "required": []
+        "required": ["none"]
       }
     }
   },
