@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Mokum Comment Filter",
+  "version": "0.1.0",
+  "description": "Hide comments from selected users or display names on mokum.place.",
+  "permissions": ["storage"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Mokum Comment Filter"
+  },
+  "host_permissions": [
+    "https://mokum.place/*",
+    "https://www.mokum.place/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://mokum.place/*",
+        "https://www.mokum.place/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_page": "options.html"
+}
