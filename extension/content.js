@@ -19,6 +19,10 @@ let blockBotsByDefault = true;
 let persistBotUsers = false;
 let notifyTimer = null;
 let applyTimer = null;
+let reapplyTimer = null;
+let profileFetchTimer = null;
+let profileFetchActive = false;
+const profileFetchQueue = new Set();
 const displayNameCache = new Map();
 const displayNamePending = new Map();
 const userCache = new Map();
@@ -72,6 +76,13 @@ function getApiOrigin() {
 
 function canFetchFromNetwork() {
   return window.location.protocol === 'http:' || window.location.protocol === 'https:';
+}
+
+function scheduleReapply(root) {
+  if (reapplyTimer) clearTimeout(reapplyTimer);
+  reapplyTimer = setTimeout(() => {
+    applyBlocklistToComments(root || document);
+  }, 150);
 }
 
 function getCountValue(counts, keys) {
@@ -185,9 +196,15 @@ function fetchProfileCountsForUsername(username) {
   if (profileCountsPending.has(normalizedUsername)) {
     return profileCountsPending.get(normalizedUsername);
   }
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeoutId = controller
+    ? setTimeout(() => controller.abort(), 2500)
+    : null;
   const request = fetch(new URL(`/${encodeURIComponent(normalizedUsername)}`, getApiOrigin()), {
     credentials: 'same-origin',
     headers: { Accept: 'text/html' },
+    signal: controller ? controller.signal : undefined,
+    cache: 'force-cache',
   })
     .then((resp) => (resp.ok ? resp.text() : null))
     .then((html) => {
@@ -208,6 +225,7 @@ function fetchProfileCountsForUsername(username) {
     })
     .catch(() => null)
     .finally(() => {
+      if (timeoutId) clearTimeout(timeoutId);
       profileCountsPending.delete(normalizedUsername);
     });
   profileCountsPending.set(normalizedUsername, request);
@@ -215,6 +233,36 @@ function fetchProfileCountsForUsername(username) {
     if (!result) profileCountsFailed.add(normalizedUsername);
     return result;
   });
+}
+
+function processProfileFetchQueue() {
+  if (profileFetchActive) return;
+  const next = profileFetchQueue.values().next().value;
+  if (!next) return;
+  profileFetchQueue.delete(next);
+  profileFetchActive = true;
+  fetchProfileCountsForUsername(next)
+    .then(() => scheduleReapply(document))
+    .finally(() => {
+      profileFetchActive = false;
+      if (profileFetchQueue.size > 0) {
+        profileFetchTimer = setTimeout(processProfileFetchQueue, 400);
+      } else {
+        profileFetchTimer = null;
+      }
+    });
+}
+
+function scheduleProfileFetch(username) {
+  const normalizedUsername = normalizeUsername(username);
+  if (!normalizedUsername) return;
+  if (!canFetchFromNetwork()) return;
+  if (profileCountsPending.has(normalizedUsername) || profileCountsFailed.has(normalizedUsername)) return;
+  if (profileFetchQueue.has(normalizedUsername)) return;
+  profileFetchQueue.add(normalizedUsername);
+  if (!profileFetchTimer) {
+    profileFetchTimer = setTimeout(processProfileFetchQueue, 600);
+  }
 }
 
 function logBlockReason(details) {
@@ -286,7 +334,7 @@ function fetchUserForUsername(username) {
       const user = data && (data.user || data);
       cacheUser(normalizedUsername, user || null);
       if (user && blockBotsByDefault && !hasBotCounts(user)) {
-        fetchProfileCountsForUsername(normalizedUsername);
+        scheduleProfileFetch(normalizedUsername);
       }
       return userCache.get(normalizedUsername);
     })
@@ -589,7 +637,7 @@ function applyBlocklistToComments(root) {
     if (!displayName && username && blockedDisplayNames.size > 0) {
       const cached = displayNameCache.get(normalizeUsername(username));
       if (cached === undefined) {
-        fetchDisplayNameForUsername(username).then(() => applyBlocklistToComments(commentEl));
+        fetchDisplayNameForUsername(username).then(() => scheduleReapply(commentEl));
       } else if (cached) {
         displayName = cached;
       }
@@ -614,14 +662,14 @@ function applyBlocklistToComments(root) {
     }
     if (blockBotsByDefault && normalizedUsername) {
       if (!botUser && !userPending.has(normalizedUsername)) {
-        fetchUserForUsername(normalizedUsername).then(() => applyBlocklistToComments(commentEl));
+        fetchUserForUsername(normalizedUsername).then(() => scheduleReapply(commentEl));
       } else if (
         botUser &&
         !hasBotCounts(botUser) &&
         !profileCountsPending.has(normalizedUsername) &&
         !profileCountsFailed.has(normalizedUsername)
       ) {
-        fetchProfileCountsForUsername(normalizedUsername).then(() => applyBlocklistToComments(commentEl));
+        scheduleProfileFetch(normalizedUsername);
       }
     }
     if (blockBotsByDefault && isBotUser(botUser)) reasons.push('bot rule');
