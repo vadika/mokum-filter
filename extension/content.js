@@ -19,6 +19,8 @@ let notifyTimer = null;
 let applyTimer = null;
 const displayNameCache = new Map();
 const displayNamePending = new Map();
+const userCache = new Map();
+const userPending = new Map();
 const commentInfoCache = new Map();
 const commentInfoPending = new Map();
 
@@ -37,6 +39,16 @@ function cacheDisplayName(username, displayName) {
   if (!normalizedUsername) return;
   const normalizedDisplayName = displayName ? normalizeDisplayName(displayName) : '';
   displayNameCache.set(normalizedUsername, normalizedDisplayName || null);
+}
+
+function cacheUser(username, user) {
+  const normalizedUsername = normalizeUsername(username);
+  if (!normalizedUsername) return;
+  userCache.set(normalizedUsername, user || null);
+  if (user && (user.display_name || user.displayName || user.name)) {
+    const displayName = user.display_name || user.displayName || user.name || null;
+    cacheDisplayName(normalizedUsername, displayName);
+  }
 }
 
 function addUsernameToBlocklist(username) {
@@ -166,6 +178,39 @@ function fetchDisplayNameForUsername(username) {
       displayNamePending.delete(normalizedUsername);
     });
   displayNamePending.set(normalizedUsername, request);
+  return request;
+}
+
+function fetchUserForUsername(username) {
+  const normalizedUsername = normalizeUsername(username);
+  if (!normalizedUsername) return Promise.resolve(null);
+  if (userCache.has(normalizedUsername)) {
+    return Promise.resolve(userCache.get(normalizedUsername));
+  }
+  if (userPending.has(normalizedUsername)) {
+    return userPending.get(normalizedUsername);
+  }
+  const request = fetch(
+    new URL(`/api/v1/users/${encodeURIComponent(normalizedUsername)}`, getApiOrigin()),
+    {
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json' },
+    }
+  )
+    .then((resp) => (resp.ok ? resp.json() : null))
+    .then((data) => {
+      const user = data && (data.user || data);
+      cacheUser(normalizedUsername, user || null);
+      return userCache.get(normalizedUsername);
+    })
+    .catch(() => {
+      cacheUser(normalizedUsername, null);
+      return null;
+    })
+    .finally(() => {
+      userPending.delete(normalizedUsername);
+    });
+  userPending.set(normalizedUsername, request);
   return request;
 }
 
@@ -451,7 +496,13 @@ function applyBlocklistToComments(root) {
     const reasons = [];
     if (normalizedUsername && blockedUsers.has(normalizedUsername)) reasons.push('blocked username');
     if (normalizedDisplayName && blockedDisplayNames.has(normalizedDisplayName)) reasons.push('blocked display name');
-    if (blockBotsByDefault && isBotUser(userRecord)) reasons.push('bot rule');
+    let botUser = userRecord;
+    if (!botUser && normalizedUsername && userCache.has(normalizedUsername)) {
+      botUser = userCache.get(normalizedUsername);
+    } else if (!botUser && normalizedUsername && blockBotsByDefault && !userPending.has(normalizedUsername)) {
+      fetchUserForUsername(normalizedUsername).then(() => applyBlocklistToComments(commentEl));
+    }
+    if (blockBotsByDefault && isBotUser(botUser)) reasons.push('bot rule');
     const shouldHide = reasons.length > 0;
     commentEl.classList.toggle(HIDDEN_CLASS, shouldHide);
     if (shouldHide) {
