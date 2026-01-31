@@ -360,6 +360,9 @@ function filterLikesList(root, maps) {
   const lists = scope.querySelectorAll ? scope.querySelectorAll('.bem-post__likes-list') : [];
   lists.forEach((list) => {
     const links = Array.from(list.querySelectorAll('a[href]'));
+    const buttons = Array.from(list.querySelectorAll('button'));
+    const likedTextMatch = list.textContent.match(/liked this.*$/i);
+    const likedSuffix = likedTextMatch ? ` ${likedTextMatch[0].trim()}` : ' liked this';
     let removedAny = false;
     links.forEach((link) => {
       let url;
@@ -381,28 +384,26 @@ function filterLikesList(root, maps) {
         (normalizedUsername && blockedUsers.has(normalizedUsername)) ||
         (normalizedDisplayName && blockedDisplayNames.has(normalizedDisplayName));
       if (!shouldHide) return;
-      const prev = link.previousSibling;
-      const next = link.nextSibling;
       link.remove();
       removedAny = true;
-      if (prev && prev.nodeType === Node.TEXT_NODE) {
-        prev.textContent = prev.textContent.replace(/,\s*$/, '');
-        if (!prev.textContent.trim()) prev.remove();
-      } else if (next && next.nodeType === Node.TEXT_NODE) {
-        next.textContent = next.textContent.replace(/^\s*,\s*/, '');
-        if (!next.textContent.trim()) next.remove();
-      }
     });
     if (removedAny) {
-      const textNodes = Array.from(list.childNodes).filter((node) => node.nodeType === Node.TEXT_NODE);
-      textNodes.forEach((node) => {
-        node.textContent = node.textContent
-          .replace(/\s+,/g, ',')
-          .replace(/,\s+,/g, ', ')
-          .replace(/^\s*,\s*/, '')
-          .replace(/\s{2,}/g, ' ');
-        if (!node.textContent.trim()) node.remove();
+      const remainingLinks = Array.from(list.querySelectorAll('a[href]'));
+      const otherButton = buttons.find((btn) => list.contains(btn)) || null;
+      while (list.firstChild) list.removeChild(list.firstChild);
+      remainingLinks.forEach((link, index) => {
+        if (index > 0) {
+          list.appendChild(document.createTextNode(', '));
+        }
+        list.appendChild(link);
       });
+      if (otherButton) {
+        if (remainingLinks.length > 0) {
+          list.appendChild(document.createTextNode(', and '));
+        }
+        list.appendChild(otherButton);
+      }
+      list.appendChild(document.createTextNode(likedSuffix));
     }
   });
 }
