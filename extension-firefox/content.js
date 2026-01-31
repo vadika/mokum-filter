@@ -598,8 +598,17 @@ function applyBlocklistToComments(root) {
     if (normalizedUsername && blockedUsers.has(normalizedUsername)) reasons.push('blocked username');
     if (normalizedDisplayName && blockedDisplayNames.has(normalizedDisplayName)) reasons.push('blocked display name');
     let botUser = userRecord;
-    if (!botUser && normalizedUsername && userCache.has(normalizedUsername)) {
-      botUser = userCache.get(normalizedUsername);
+    if (normalizedUsername && userCache.has(normalizedUsername)) {
+      const cached = userCache.get(normalizedUsername);
+      if (!botUser) {
+        botUser = cached;
+      } else if (cached) {
+        if (!botUser.status && cached.status) botUser.status = cached.status;
+        if (!hasBotCounts(botUser) && cached.counts) {
+          if (!botUser.counts) botUser.counts = {};
+          Object.assign(botUser.counts, cached.counts);
+        }
+      }
     }
     if (blockBotsByDefault && normalizedUsername) {
       if (!botUser && !userPending.has(normalizedUsername)) {
