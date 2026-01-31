@@ -80,6 +80,7 @@ function isBotUser(user) {
   if (!user) return false;
   const hasPrivateFeed =
     user.status === 'private' ||
+    user.status === 'fyeo' ||
     Boolean(user.private_subfeed_url) ||
     Boolean(user.private_subfeed_display_name);
   if (!hasPrivateFeed) return false;
