@@ -441,11 +441,13 @@ function loadBlocklist() {
 }
 
 function injectStyles() {
-  if (document.getElementById('mokum-comment-filter-style')) return;
-  const style = document.createElement('style');
-  style.id = 'mokum-comment-filter-style';
+  let style = document.getElementById('mokum-comment-filter-style');
+  if (!style) {
+    style = document.createElement('style');
+    style.id = 'mokum-comment-filter-style';
+    document.head.appendChild(style);
+  }
   style.textContent = `.${HIDDEN_CLASS} { display: none !important; }`;
-  document.head.appendChild(style);
 }
 
 function observeComments() {
