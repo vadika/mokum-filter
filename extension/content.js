@@ -351,7 +351,60 @@ function applyBlocklistToComments(root) {
       addUsernameToBlocklist(normalizedUsername);
     }
   });
+  filterLikesList(scope, maps);
   scheduleBlockedCountUpdate();
+}
+
+function filterLikesList(root, maps) {
+  const scope = root || document;
+  const lists = scope.querySelectorAll ? scope.querySelectorAll('.bem-post__likes-list') : [];
+  lists.forEach((list) => {
+    const links = Array.from(list.querySelectorAll('a[href]'));
+    let removedAny = false;
+    links.forEach((link) => {
+      let url;
+      try {
+        url = new URL(link.getAttribute('href'), window.location.origin);
+      } catch (err) {
+        return;
+      }
+      if (url.origin !== window.location.origin) return;
+      if (!isUserPath(url.pathname)) return;
+      const username = url.pathname.slice(1);
+      const normalizedUsername = normalizeUsername(username);
+      let displayName = null;
+      if (maps && username) {
+        displayName = maps.usernameToDisplayName.get(String(username).toLowerCase()) || null;
+      }
+      const normalizedDisplayName = normalizeDisplayName(displayName);
+      const shouldHide =
+        (normalizedUsername && blockedUsers.has(normalizedUsername)) ||
+        (normalizedDisplayName && blockedDisplayNames.has(normalizedDisplayName));
+      if (!shouldHide) return;
+      const prev = link.previousSibling;
+      const next = link.nextSibling;
+      link.remove();
+      removedAny = true;
+      if (prev && prev.nodeType === Node.TEXT_NODE) {
+        prev.textContent = prev.textContent.replace(/,\s*$/, '');
+        if (!prev.textContent.trim()) prev.remove();
+      } else if (next && next.nodeType === Node.TEXT_NODE) {
+        next.textContent = next.textContent.replace(/^\s*,\s*/, '');
+        if (!next.textContent.trim()) next.remove();
+      }
+    });
+    if (removedAny) {
+      const textNodes = Array.from(list.childNodes).filter((node) => node.nodeType === Node.TEXT_NODE);
+      textNodes.forEach((node) => {
+        node.textContent = node.textContent
+          .replace(/\s+,/g, ',')
+          .replace(/,\s+,/g, ', ')
+          .replace(/^\s*,\s*/, '')
+          .replace(/\s{2,}/g, ' ');
+        if (!node.textContent.trim()) node.remove();
+      });
+    }
+  });
 }
 
 function scheduleBlockedCountUpdate() {
@@ -391,8 +444,7 @@ function injectStyles() {
   if (document.getElementById('mokum-comment-filter-style')) return;
   const style = document.createElement('style');
   style.id = 'mokum-comment-filter-style';
-  style.textContent = `.${HIDDEN_CLASS} { display: none !important; }
-.bem-post__likes-list { display: none !important; }`;
+  style.textContent = `.${HIDDEN_CLASS} { display: none !important; }`;
   document.head.appendChild(style);
 }
 
