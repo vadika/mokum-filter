@@ -467,6 +467,8 @@ function observeComments() {
             scheduleApply(commentEl);
           } else if (node.querySelector && node.querySelector(COMMENT_SELECTOR)) {
             scheduleApply(node);
+          } else if (node.closest && node.closest('.bem-post__likes')) {
+            filterLikesList(node.closest('.bem-post__likes'), buildStoreMaps());
           }
         }
       } else if (mutation.type === 'attributes') {
@@ -479,6 +481,8 @@ function observeComments() {
             : null;
         if (commentEl) {
           scheduleApply(commentEl);
+        } else if (target.closest('.bem-post__likes')) {
+          filterLikesList(target.closest('.bem-post__likes'), buildStoreMaps());
         } else if (target.closest('.bem-post__comments')) {
           const postEl = target.closest('.bem-post[data-post-id]');
           scheduleApply(postEl || target);
@@ -506,6 +510,21 @@ function hookMoreComments() {
       setTimeout(() => applyBlocklistToComments(scope), 100);
       setTimeout(() => applyBlocklistToComments(scope), 600);
       setTimeout(() => applyBlocklistToComments(scope), 1500);
+    },
+    true
+  );
+
+  document.addEventListener(
+    'click',
+    (event) => {
+      const trigger = event.target.closest && event.target.closest('.bem-post__likes-list button');
+      if (!trigger) return;
+      const likes = trigger.closest('.bem-post__likes');
+      const scope = likes || document;
+      // Re-apply after like list expansion.
+      setTimeout(() => filterLikesList(scope, buildStoreMaps()), 100);
+      setTimeout(() => filterLikesList(scope, buildStoreMaps()), 600);
+      setTimeout(() => filterLikesList(scope, buildStoreMaps()), 1500);
     },
     true
   );
