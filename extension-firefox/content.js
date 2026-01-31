@@ -697,7 +697,12 @@ function scheduleBlockedCountUpdate() {
   if (notifyTimer) clearTimeout(notifyTimer);
   notifyTimer = setTimeout(() => {
     const count = document.querySelectorAll(`.${HIDDEN_CLASS}`).length;
-    ext.runtime.sendMessage({ type: 'blockedCount', count });
+    if (!ext.runtime || !ext.runtime.id) return;
+    try {
+      ext.runtime.sendMessage({ type: 'blockedCount', count });
+    } catch (err) {
+      // ignore when extension context is gone (page reload / extension update)
+    }
   }, 150);
 }
 
