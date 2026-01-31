@@ -106,7 +106,11 @@ function extractStatsCounts() {
     if (parts.length < 2) return;
     if (parts[1] !== 'subscriptions' && parts[1] !== 'subscribers') return;
     if (!username) username = parts[0];
-    const count = parseCountFromText(link.textContent || '');
+    const text = link.textContent || '';
+    let count = parseCountFromText(text);
+    if (count === null && !/\\d/.test(text)) {
+      count = 0;
+    }
     if (count === null) return;
     if (parts[1] === 'subscriptions') subscriptions = count;
     if (parts[1] === 'subscribers') subscribers = count;
