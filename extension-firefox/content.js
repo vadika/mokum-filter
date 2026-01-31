@@ -390,20 +390,16 @@ function filterLikesList(root, maps) {
     if (removedAny) {
       const remainingLinks = Array.from(list.querySelectorAll('a[href]'));
       const otherButton = buttons.find((btn) => list.contains(btn)) || null;
-      while (list.firstChild) list.removeChild(list.firstChild);
-      remainingLinks.forEach((link, index) => {
-        if (index > 0) {
-          list.appendChild(document.createTextNode(', '));
-        }
-        list.appendChild(link);
-      });
+      let joined = remainingLinks.map((link) => link.outerHTML).join(', ');
       if (otherButton) {
-        if (remainingLinks.length > 0) {
-          list.appendChild(document.createTextNode(', and '));
+        const buttonHtml = otherButton.outerHTML;
+        if (joined) {
+          joined += `, and ${buttonHtml}`;
+        } else {
+          joined = `${buttonHtml}`;
         }
-        list.appendChild(otherButton);
       }
-      list.appendChild(document.createTextNode(likedSuffix));
+      list.innerHTML = `${joined}${likedSuffix}`;
     }
   });
 }
