@@ -4,6 +4,7 @@ const ext = typeof browser !== 'undefined' ? browser : chrome;
 const BLOCKLIST_KEY = 'blockedUsers';
 const DISPLAY_BLOCKLIST_KEY = 'blockedDisplayNames';
 const AUTO_MAP_KEY = 'autoMapUsernames';
+const BLOCK_BOTS_KEY = 'blockBotsByDefault';
 const HIDDEN_CLASS = 'mokum-comment-filter-hidden';
 const COMMENT_SELECTOR = '.bem-post__comment';
 const COMMENT_REST_SELECTOR = '.bem-post__comment-rest';
@@ -13,6 +14,7 @@ const storage = ext.storage && ext.storage.sync ? ext.storage.sync : ext.storage
 let blockedUsers = new Set();
 let blockedDisplayNames = new Set();
 let autoMapUsernames = false;
+let blockBotsByDefault = true;
 let notifyTimer = null;
 let applyTimer = null;
 const displayNameCache = new Map();
@@ -50,6 +52,28 @@ function addUsernameToBlocklist(username) {
 
 function getApiOrigin() {
   return window.location.origin.replace('://www.', '://');
+}
+
+function getCountValue(counts, keys) {
+  if (!counts) return 0;
+  for (const key of keys) {
+    const value = counts[key];
+    if (typeof value === 'number') return value;
+  }
+  return 0;
+}
+
+function isBotUser(user) {
+  if (!user) return false;
+  const hasPrivateFeed =
+    user.status === 'private' ||
+    Boolean(user.private_subfeed_url) ||
+    Boolean(user.private_subfeed_display_name);
+  if (!hasPrivateFeed) return false;
+  const counts = user.counts || {};
+  const subscribers = getCountValue(counts, ['subscribers', 'subscribers_count', 'subscriber_count']);
+  const subscriptions = getCountValue(counts, ['subscriptions', 'subscriptions_count', 'subscription_count']);
+  return subscribers === 0 && subscriptions === 0;
 }
 
 function fetchDisplayNameForUsername(username) {
@@ -219,6 +243,8 @@ function buildStoreMaps() {
   const userIdToDisplayName = new Map();
   const userIdToName = new Map();
   const usernameToDisplayName = new Map();
+  const userIdToUser = new Map();
+  const usernameToUser = new Map();
   Object.keys(users).forEach((id) => {
     const user = users[id];
     if (!user) return;
@@ -227,6 +253,8 @@ function buildStoreMaps() {
     if (user.name && user.display_name) {
       usernameToDisplayName.set(String(user.name).toLowerCase(), user.display_name);
     }
+    if (user.id != null) userIdToUser.set(String(user.id), user);
+    if (user.name) usernameToUser.set(String(user.name).toLowerCase(), user);
   });
   const commentIdToUserId = new Map();
   entries.forEach((entry) => {
@@ -240,7 +268,9 @@ function buildStoreMaps() {
     commentIdToUserId,
     userIdToDisplayName,
     userIdToName,
-    usernameToDisplayName
+    usernameToDisplayName,
+    userIdToUser,
+    usernameToUser
   };
 }
 
@@ -315,6 +345,18 @@ function applyBlocklistToComments(root) {
       const cachedFromStore = maps.usernameToDisplayName.get(String(username).toLowerCase());
       if (cachedFromStore) cacheDisplayName(username, cachedFromStore);
     }
+    let userRecord = null;
+    if (maps) {
+      if (authorInfo.commentId) {
+        const userId = maps.commentIdToUserId.get(String(authorInfo.commentId));
+        if (userId) {
+          userRecord = maps.userIdToUser.get(String(userId)) || userRecord;
+        }
+      }
+      if (!userRecord && username) {
+        userRecord = maps.usernameToUser.get(String(username).toLowerCase()) || null;
+      }
+    }
     if (maps && username && !displayName) {
       displayName = maps.usernameToDisplayName.get(String(username).toLowerCase()) || displayName;
     }
@@ -339,7 +381,8 @@ function applyBlocklistToComments(root) {
     const normalizedDisplayName = normalizeDisplayName(displayName);
     const shouldHide =
       (normalizedUsername && blockedUsers.has(normalizedUsername)) ||
-      (normalizedDisplayName && blockedDisplayNames.has(normalizedDisplayName));
+      (normalizedDisplayName && blockedDisplayNames.has(normalizedDisplayName)) ||
+      (blockBotsByDefault && isBotUser(userRecord));
     commentEl.classList.toggle(HIDDEN_CLASS, shouldHide);
     if (
       shouldHide &&
@@ -380,9 +423,14 @@ function filterLikesList(root, maps) {
         displayName = maps.usernameToDisplayName.get(String(username).toLowerCase()) || null;
       }
       const normalizedDisplayName = normalizeDisplayName(displayName);
+      let userRecord = null;
+      if (maps && username) {
+        userRecord = maps.usernameToUser.get(String(username).toLowerCase()) || null;
+      }
       const shouldHide =
         (normalizedUsername && blockedUsers.has(normalizedUsername)) ||
-        (normalizedDisplayName && blockedDisplayNames.has(normalizedDisplayName));
+        (normalizedDisplayName && blockedDisplayNames.has(normalizedDisplayName)) ||
+        (blockBotsByDefault && isBotUser(userRecord));
       if (!shouldHide) return;
       link.remove();
       removedAny = true;
@@ -415,13 +463,14 @@ function scheduleBlockedCountUpdate() {
 
 function loadBlocklist() {
   return new Promise((resolve) => {
-    const maybePromise = storage.get([BLOCKLIST_KEY, DISPLAY_BLOCKLIST_KEY, AUTO_MAP_KEY], (result) => {
+    const maybePromise = storage.get([BLOCKLIST_KEY, DISPLAY_BLOCKLIST_KEY, AUTO_MAP_KEY, BLOCK_BOTS_KEY], (result) => {
       if (result) {
         const list = Array.isArray(result[BLOCKLIST_KEY]) ? result[BLOCKLIST_KEY] : [];
         const displayList = Array.isArray(result[DISPLAY_BLOCKLIST_KEY]) ? result[DISPLAY_BLOCKLIST_KEY] : [];
         blockedUsers = new Set(list.map(normalizeUsername).filter(Boolean));
         blockedDisplayNames = new Set(displayList.map(normalizeDisplayName).filter(Boolean));
         autoMapUsernames = result[AUTO_MAP_KEY] === undefined ? true : Boolean(result[AUTO_MAP_KEY]);
+        blockBotsByDefault = result[BLOCK_BOTS_KEY] === undefined ? true : Boolean(result[BLOCK_BOTS_KEY]);
         resolve();
       }
     });
@@ -432,6 +481,7 @@ function loadBlocklist() {
         blockedUsers = new Set(list.map(normalizeUsername).filter(Boolean));
         blockedDisplayNames = new Set(displayList.map(normalizeDisplayName).filter(Boolean));
         autoMapUsernames = result[AUTO_MAP_KEY] === undefined ? true : Boolean(result[AUTO_MAP_KEY]);
+        blockBotsByDefault = result[BLOCK_BOTS_KEY] === undefined ? true : Boolean(result[BLOCK_BOTS_KEY]);
         resolve();
       });
     }
@@ -549,6 +599,9 @@ function init() {
     }
     if (changes[AUTO_MAP_KEY]) {
       autoMapUsernames = Boolean(changes[AUTO_MAP_KEY].newValue);
+    }
+    if (changes[BLOCK_BOTS_KEY]) {
+      blockBotsByDefault = Boolean(changes[BLOCK_BOTS_KEY].newValue);
     }
     applyBlocklistToComments(document);
   });
