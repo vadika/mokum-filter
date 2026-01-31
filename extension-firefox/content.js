@@ -25,6 +25,9 @@ let reapplyTimer = null;
 let profileFetchTimer = null;
 let profileFetchActive = false;
 const profileFetchQueue = new Set();
+const visibleComments = new WeakSet();
+const observedComments = new WeakSet();
+let visibilityObserver = null;
 const displayNameCache = new Map();
 const displayNamePending = new Map();
 const userCache = new Map();
@@ -78,6 +81,40 @@ function getApiOrigin() {
 
 function canFetchFromNetwork() {
   return window.location.protocol === 'http:' || window.location.protocol === 'https:';
+}
+
+function ensureVisibilityObserver() {
+  if (visibilityObserver || typeof IntersectionObserver === 'undefined') return;
+  visibilityObserver = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        const target = entry.target;
+        visibleComments.add(target);
+        visibilityObserver.unobserve(target);
+        scheduleReapply(target);
+      });
+    },
+    { root: null, rootMargin: '200px', threshold: 0 }
+  );
+}
+
+function markCommentForVisibility(commentEl) {
+  if (!commentEl || observedComments.has(commentEl)) return;
+  observedComments.add(commentEl);
+  if (typeof IntersectionObserver === 'undefined') {
+    visibleComments.add(commentEl);
+    return;
+  }
+  ensureVisibilityObserver();
+  visibilityObserver.observe(commentEl);
+}
+
+function isCommentVisible(commentEl) {
+  if (!commentEl) return false;
+  if (visibleComments.has(commentEl)) return true;
+  markCommentForVisibility(commentEl);
+  return false;
 }
 
 function scheduleReapply(root) {
@@ -639,7 +676,9 @@ function applyBlocklistToComments(root) {
     if (!displayName && username && blockedDisplayNames.size > 0) {
       const cached = displayNameCache.get(normalizeUsername(username));
       if (cached === undefined) {
-        fetchDisplayNameForUsername(username).then(() => scheduleReapply(commentEl));
+        if (isCommentVisible(commentEl)) {
+          fetchDisplayNameForUsername(username).then(() => scheduleReapply(commentEl));
+        }
       } else if (cached) {
         displayName = cached;
       }
@@ -668,14 +707,18 @@ function applyBlocklistToComments(root) {
     }
     if (blockBotsByDefault && normalizedUsername) {
       if (!botUser && !userPending.has(normalizedUsername)) {
-        fetchUserForUsername(normalizedUsername).then(() => scheduleReapply(commentEl));
+        if (isCommentVisible(commentEl)) {
+          fetchUserForUsername(normalizedUsername).then(() => scheduleReapply(commentEl));
+        }
       } else if (
         botUser &&
         !hasBotCounts(botUser) &&
         !profileCountsPending.has(normalizedUsername) &&
         !profileCountsFailed.has(normalizedUsername)
       ) {
-        scheduleProfileFetch(normalizedUsername);
+        if (isCommentVisible(commentEl)) {
+          scheduleProfileFetch(normalizedUsername);
+        }
       }
     }
     if (blockBotsByDefault && isBotUser(botUser)) reasons.push('bot rule');
