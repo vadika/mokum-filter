@@ -76,6 +76,19 @@ function isBotUser(user) {
   return subscribers === 0 && subscriptions === 0;
 }
 
+function logBlockReason(details) {
+  try {
+    const parts = [];
+    if (details.username) parts.push(`@${details.username}`);
+    if (details.displayName) parts.push(`"${details.displayName}"`);
+    if (details.commentId) parts.push(`comment ${details.commentId}`);
+    const reasonText = details.reasons.join(', ');
+    console.info(`[Mokum Comment Filter] Blocked ${parts.join(' ')} (${reasonText}).`);
+  } catch (err) {
+    // ignore logging failures
+  }
+}
+
 function fetchDisplayNameForUsername(username) {
   const normalizedUsername = normalizeUsername(username);
   if (!normalizedUsername) return Promise.resolve(null);
@@ -379,15 +392,20 @@ function applyBlocklistToComments(root) {
     }
     const normalizedUsername = normalizeUsername(username);
     const normalizedDisplayName = normalizeDisplayName(displayName);
-      let userRecord = null;
-      if (maps && username) {
-        userRecord = maps.usernameToUser.get(String(username).toLowerCase()) || null;
-      }
-      const shouldHide =
-        (normalizedUsername && blockedUsers.has(normalizedUsername)) ||
-        (normalizedDisplayName && blockedDisplayNames.has(normalizedDisplayName)) ||
-        (blockBotsByDefault && isBotUser(userRecord));
+    const reasons = [];
+    if (normalizedUsername && blockedUsers.has(normalizedUsername)) reasons.push('blocked username');
+    if (normalizedDisplayName && blockedDisplayNames.has(normalizedDisplayName)) reasons.push('blocked display name');
+    if (blockBotsByDefault && isBotUser(userRecord)) reasons.push('bot rule');
+    const shouldHide = reasons.length > 0;
     commentEl.classList.toggle(HIDDEN_CLASS, shouldHide);
+    if (shouldHide) {
+      logBlockReason({
+        username: normalizedUsername || username || null,
+        displayName: displayName || null,
+        commentId: authorInfo.commentId || null,
+        reasons
+      });
+    }
     if (
       shouldHide &&
       autoMapUsernames &&
@@ -427,9 +445,14 @@ function filterLikesList(root, maps) {
         displayName = maps.usernameToDisplayName.get(String(username).toLowerCase()) || null;
       }
       const normalizedDisplayName = normalizeDisplayName(displayName);
+      let userRecord = null;
+      if (maps && username) {
+        userRecord = maps.usernameToUser.get(String(username).toLowerCase()) || null;
+      }
       const shouldHide =
         (normalizedUsername && blockedUsers.has(normalizedUsername)) ||
-        (normalizedDisplayName && blockedDisplayNames.has(normalizedDisplayName));
+        (normalizedDisplayName && blockedDisplayNames.has(normalizedDisplayName)) ||
+        (blockBotsByDefault && isBotUser(userRecord));
       if (!shouldHide) return;
       link.remove();
       removedAny = true;
