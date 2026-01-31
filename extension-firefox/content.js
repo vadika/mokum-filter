@@ -411,7 +411,8 @@ function applyBlocklistToComments(root) {
       autoMapUsernames &&
       normalizedDisplayName &&
       normalizedUsername &&
-      !blockedUsers.has(normalizedUsername)
+      !blockedUsers.has(normalizedUsername) &&
+      reasons.includes('blocked display name')
     ) {
       addUsernameToBlocklist(normalizedUsername);
     }
