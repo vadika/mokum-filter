@@ -137,9 +137,7 @@ function isBotUser(user) {
   if (!user) return false;
   const hasPrivateFeed =
     user.status === 'private' ||
-    user.status === 'fyeo' ||
-    Boolean(user.private_subfeed_url) ||
-    Boolean(user.private_subfeed_display_name);
+    user.status === 'fyeo';
   if (!hasPrivateFeed) return false;
   const counts = user.counts || {};
   const subscribers = getCountValue(counts, ['subscribers', 'subscribers_count', 'subscriber_count']);
