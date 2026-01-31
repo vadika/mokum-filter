@@ -22,6 +22,7 @@ const displayNamePending = new Map();
 const userCache = new Map();
 const userPending = new Map();
 const profileCountsPending = new Map();
+const profileCountsFailed = new Set();
 const commentInfoCache = new Map();
 const commentInfoPending = new Map();
 
@@ -65,6 +66,10 @@ function addUsernameToBlocklist(username) {
 
 function getApiOrigin() {
   return window.location.origin.replace('://www.', '://');
+}
+
+function canFetchFromNetwork() {
+  return window.location.protocol === 'http:' || window.location.protocol === 'https:';
 }
 
 function getCountValue(counts, keys) {
@@ -140,6 +145,29 @@ function extractStatsCounts() {
   return extractStatsCountsFromRoot(document);
 }
 
+function extractProfileStatusFromRoot(root) {
+  if (!root || !root.querySelector) return null;
+  const feedInfo = root.querySelector('.bem-feedinfo__description');
+  if (!feedInfo) return null;
+  if (feedInfo.querySelector('.fa-eye')) return 'fyeo';
+  if (feedInfo.querySelector('.fa-lock')) return 'private';
+  const text = feedInfo.textContent ? feedInfo.textContent.toLowerCase() : '';
+  if (text.includes('for your eyes only')) return 'fyeo';
+  if (text.includes('private feed')) return 'private';
+  return null;
+}
+
+function extractProfileInfoFromRoot(root) {
+  const statsCounts = extractStatsCountsFromRoot(root);
+  const status = extractProfileStatusFromRoot(root);
+  if (!statsCounts && !status) return null;
+  return {
+    username: statsCounts ? statsCounts.username : null,
+    counts: statsCounts ? statsCounts.counts : null,
+    status
+  };
+}
+
 function hasBotCounts(user) {
   if (!user || !user.counts) return false;
   const subscribers = getCountValue(user.counts, ['subscribers', 'subscribers_count', 'subscriber_count']);
@@ -150,6 +178,8 @@ function hasBotCounts(user) {
 function fetchProfileCountsForUsername(username) {
   const normalizedUsername = normalizeUsername(username);
   if (!normalizedUsername) return Promise.resolve(null);
+  if (!canFetchFromNetwork()) return Promise.resolve(null);
+  if (profileCountsFailed.has(normalizedUsername)) return Promise.resolve(null);
   if (profileCountsPending.has(normalizedUsername)) {
     return profileCountsPending.get(normalizedUsername);
   }
@@ -161,13 +191,16 @@ function fetchProfileCountsForUsername(username) {
     .then((html) => {
       if (!html) return null;
       const doc = new DOMParser().parseFromString(html, 'text/html');
-      const statsCounts = extractStatsCountsFromRoot(doc);
-      if (!statsCounts) return null;
-      const key = normalizeUsername(statsCounts.username);
+      const info = extractProfileInfoFromRoot(doc);
+      if (!info) return null;
+      const key = normalizeUsername(info.username || normalizedUsername);
       if (!key) return null;
       const user = userCache.get(key) || { name: key };
-      if (!user.counts) user.counts = {};
-      Object.assign(user.counts, statsCounts.counts);
+      if (info.status) user.status = info.status;
+      if (info.counts) {
+        if (!user.counts) user.counts = {};
+        Object.assign(user.counts, info.counts);
+      }
       userCache.set(key, user);
       return user;
     })
@@ -176,7 +209,10 @@ function fetchProfileCountsForUsername(username) {
       profileCountsPending.delete(normalizedUsername);
     });
   profileCountsPending.set(normalizedUsername, request);
-  return request;
+  return request.then((result) => {
+    if (!result) profileCountsFailed.add(normalizedUsername);
+    return result;
+  });
 }
 
 function logBlockReason(details) {
@@ -228,6 +264,7 @@ function fetchDisplayNameForUsername(username) {
 function fetchUserForUsername(username) {
   const normalizedUsername = normalizeUsername(username);
   if (!normalizedUsername) return Promise.resolve(null);
+  if (!canFetchFromNetwork()) return Promise.resolve(null);
   if (userCache.has(normalizedUsername)) {
     return Promise.resolve(userCache.get(normalizedUsername));
   }
@@ -425,6 +462,22 @@ function buildStoreMaps() {
       Object.assign(user.counts, statsCounts.counts);
     }
   }
+  const profileInfo = extractProfileInfoFromRoot(document);
+  if (profileInfo) {
+    const key = normalizeUsername(profileInfo.username);
+    if (key) {
+      const user = userCache.get(key) || usernameToUser.get(key) || { name: key };
+      if (profileInfo.status) user.status = profileInfo.status;
+      if (profileInfo.counts) {
+        if (!user.counts) user.counts = {};
+        Object.assign(user.counts, profileInfo.counts);
+      }
+      userCache.set(key, user);
+      if (usernameToUser.has(key)) {
+        usernameToUser.set(key, user);
+      }
+    }
+  }
   return {
     commentIdToUserId,
     userIdToDisplayName,
@@ -550,7 +603,12 @@ function applyBlocklistToComments(root) {
     if (blockBotsByDefault && normalizedUsername) {
       if (!botUser && !userPending.has(normalizedUsername)) {
         fetchUserForUsername(normalizedUsername).then(() => applyBlocklistToComments(commentEl));
-      } else if (botUser && !hasBotCounts(botUser) && !profileCountsPending.has(normalizedUsername)) {
+      } else if (
+        botUser &&
+        !hasBotCounts(botUser) &&
+        !profileCountsPending.has(normalizedUsername) &&
+        !profileCountsFailed.has(normalizedUsername)
+      ) {
         fetchProfileCountsForUsername(normalizedUsername).then(() => applyBlocklistToComments(commentEl));
       }
     }
