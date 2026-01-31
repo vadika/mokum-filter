@@ -3,10 +3,27 @@
 const ext = typeof browser !== 'undefined' ? browser : chrome;
 
 const DEFAULT_TITLE = 'Mokum Comment Filter';
+const MAX_USERS_IN_TITLE = 5;
 
-function updateAction(tabId, count) {
+function formatUsers(users) {
+  if (!Array.isArray(users) || users.length === 0) return '';
+  const unique = Array.from(new Set(users.filter(Boolean)));
+  if (unique.length === 0) return '';
+  const shown = unique.slice(0, MAX_USERS_IN_TITLE).map((name) => `@${name}`);
+  const extra = unique.length - shown.length;
+  if (extra > 0) {
+    shown.push(`and ${extra} more`);
+  }
+  return shown.join(', ');
+}
+
+function updateAction(tabId, count, users) {
   const text = count > 0 ? String(count) : '';
-  const title = count > 0 ? `Blocked comments: ${count}` : DEFAULT_TITLE;
+  const userText = formatUsers(users);
+  const title =
+    count > 0
+      ? `Blocked comments: ${count}${userText ? `\nBlocked users: ${userText}` : ''}`
+      : DEFAULT_TITLE;
   if (tabId == null) return;
   const a = ext.action || ext.browserAction;
   if (!a) return;
@@ -38,7 +55,7 @@ if (action && action.onClicked) {
 ext.runtime.onMessage.addListener((message, sender) => {
   if (!message || message.type !== 'blockedCount') return;
   const tabId = sender.tab && sender.tab.id;
-  updateAction(tabId, Number(message.count) || 0);
+  updateAction(tabId, Number(message.count) || 0, message.users || []);
 });
 
 ext.tabs.onRemoved.addListener((tabId) => {

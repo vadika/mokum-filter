@@ -683,6 +683,9 @@ function applyBlocklistToComments(root) {
     }
     const normalizedUsername = normalizeUsername(username);
     const normalizedDisplayName = normalizeDisplayName(displayName);
+    if (normalizedUsername) {
+      commentEl.dataset.mokumUsername = normalizedUsername;
+    }
     if (normalizedUsername && whitelistedUsers.has(normalizedUsername)) {
       commentEl.classList.remove(HIDDEN_CLASS);
       return;
@@ -812,9 +815,14 @@ function scheduleBlockedCountUpdate() {
   if (notifyTimer) clearTimeout(notifyTimer);
   notifyTimer = setTimeout(() => {
     const count = document.querySelectorAll(`.${HIDDEN_CLASS}`).length;
+    const names = new Set();
+    document.querySelectorAll(`.${HIDDEN_CLASS}[data-mokum-username]`).forEach((el) => {
+      const username = el.dataset.mokumUsername;
+      if (username) names.add(username);
+    });
     if (!ext.runtime || !ext.runtime.id) return;
     try {
-      ext.runtime.sendMessage({ type: 'blockedCount', count });
+      ext.runtime.sendMessage({ type: 'blockedCount', count, users: Array.from(names).sort() });
     } catch (err) {
       // ignore when extension context is gone (page reload / extension update)
     }
