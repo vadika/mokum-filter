@@ -391,7 +391,8 @@ function injectStyles() {
   if (document.getElementById('mokum-comment-filter-style')) return;
   const style = document.createElement('style');
   style.id = 'mokum-comment-filter-style';
-  style.textContent = `.${HIDDEN_CLASS} { display: none !important; }`;
+  style.textContent = `.${HIDDEN_CLASS} { display: none !important; }
+.bem-post__likes-list { display: none !important; }`;
   document.head.appendChild(style);
 }
 
