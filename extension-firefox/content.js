@@ -5,6 +5,7 @@ const BLOCKLIST_KEY = 'blockedUsers';
 const DISPLAY_BLOCKLIST_KEY = 'blockedDisplayNames';
 const AUTO_MAP_KEY = 'autoMapUsernames';
 const BLOCK_BOTS_KEY = 'blockBotsByDefault';
+const PERSIST_BOTS_KEY = 'persistBotUsers';
 const HIDDEN_CLASS = 'mokum-comment-filter-hidden';
 const COMMENT_SELECTOR = '.bem-post__comment';
 const COMMENT_REST_SELECTOR = '.bem-post__comment-rest';
@@ -15,6 +16,7 @@ let blockedUsers = new Set();
 let blockedDisplayNames = new Set();
 let autoMapUsernames = false;
 let blockBotsByDefault = true;
+let persistBotUsers = false;
 let notifyTimer = null;
 let applyTimer = null;
 const displayNameCache = new Map();
@@ -643,6 +645,15 @@ function applyBlocklistToComments(root) {
     ) {
       addUsernameToBlocklist(normalizedUsername);
     }
+    if (
+      shouldHide &&
+      persistBotUsers &&
+      normalizedUsername &&
+      !blockedUsers.has(normalizedUsername) &&
+      reasons.includes('bot rule')
+    ) {
+      addUsernameToBlocklist(normalizedUsername);
+    }
   });
   filterLikesList(scope, maps);
   scheduleBlockedCountUpdate();
@@ -717,7 +728,9 @@ function scheduleBlockedCountUpdate() {
 
 function loadBlocklist() {
   return new Promise((resolve) => {
-    const maybePromise = storage.get([BLOCKLIST_KEY, DISPLAY_BLOCKLIST_KEY, AUTO_MAP_KEY, BLOCK_BOTS_KEY], (result) => {
+  const maybePromise = storage.get(
+    [BLOCKLIST_KEY, DISPLAY_BLOCKLIST_KEY, AUTO_MAP_KEY, BLOCK_BOTS_KEY, PERSIST_BOTS_KEY],
+    (result) => {
       if (result) {
         const list = Array.isArray(result[BLOCKLIST_KEY]) ? result[BLOCKLIST_KEY] : [];
         const displayList = Array.isArray(result[DISPLAY_BLOCKLIST_KEY]) ? result[DISPLAY_BLOCKLIST_KEY] : [];
@@ -725,9 +738,11 @@ function loadBlocklist() {
         blockedDisplayNames = new Set(displayList.map(normalizeDisplayName).filter(Boolean));
         autoMapUsernames = result[AUTO_MAP_KEY] === undefined ? true : Boolean(result[AUTO_MAP_KEY]);
         blockBotsByDefault = result[BLOCK_BOTS_KEY] === undefined ? true : Boolean(result[BLOCK_BOTS_KEY]);
+        persistBotUsers = result[PERSIST_BOTS_KEY] === undefined ? false : Boolean(result[PERSIST_BOTS_KEY]);
         resolve();
       }
-    });
+    }
+  );
     if (maybePromise && typeof maybePromise.then === 'function') {
       maybePromise.then((result) => {
         const list = Array.isArray(result[BLOCKLIST_KEY]) ? result[BLOCKLIST_KEY] : [];
@@ -736,6 +751,7 @@ function loadBlocklist() {
         blockedDisplayNames = new Set(displayList.map(normalizeDisplayName).filter(Boolean));
         autoMapUsernames = result[AUTO_MAP_KEY] === undefined ? true : Boolean(result[AUTO_MAP_KEY]);
         blockBotsByDefault = result[BLOCK_BOTS_KEY] === undefined ? true : Boolean(result[BLOCK_BOTS_KEY]);
+        persistBotUsers = result[PERSIST_BOTS_KEY] === undefined ? false : Boolean(result[PERSIST_BOTS_KEY]);
         resolve();
       });
     }
@@ -856,6 +872,9 @@ function init() {
     }
     if (changes[BLOCK_BOTS_KEY]) {
       blockBotsByDefault = Boolean(changes[BLOCK_BOTS_KEY].newValue);
+    }
+    if (changes[PERSIST_BOTS_KEY]) {
+      persistBotUsers = Boolean(changes[PERSIST_BOTS_KEY].newValue);
     }
     applyBlocklistToComments(document);
   });
