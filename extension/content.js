@@ -217,6 +217,7 @@ function fetchProfileCountsForUsername(username) {
 
 function logBlockReason(details) {
   try {
+    if (!details || !details.reasons || !details.reasons.includes('bot rule')) return;
     const parts = [];
     if (details.username) parts.push(`@${details.username}`);
     if (details.displayName) parts.push(`"${details.displayName}"`);
