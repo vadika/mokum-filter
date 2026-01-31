@@ -55,12 +55,12 @@ function getApiOrigin() {
 }
 
 function getCountValue(counts, keys) {
-  if (!counts) return 0;
+  if (!counts) return null;
   for (const key of keys) {
     const value = counts[key];
     if (typeof value === 'number') return value;
   }
-  return 0;
+  return null;
 }
 
 function isBotUser(user) {
@@ -73,7 +73,50 @@ function isBotUser(user) {
   const counts = user.counts || {};
   const subscribers = getCountValue(counts, ['subscribers', 'subscribers_count', 'subscriber_count']);
   const subscriptions = getCountValue(counts, ['subscriptions', 'subscriptions_count', 'subscription_count']);
+  if (subscribers === null || subscriptions === null) return false;
   return subscribers === 0 && subscriptions === 0;
+}
+
+function parseCountFromText(text) {
+  if (!text) return null;
+  const match = text.match(/[\\d\\s.,]+/);
+  if (!match) return null;
+  const raw = match[0].replace(/[^\\d]/g, '');
+  if (!raw) return null;
+  const value = Number.parseInt(raw, 10);
+  return Number.isNaN(value) ? null : value;
+}
+
+function extractStatsCounts() {
+  const stats = document.querySelector('.stats');
+  if (!stats) return null;
+  const links = Array.from(stats.querySelectorAll('.stats-item a[href]'));
+  let username = null;
+  let subscribers = null;
+  let subscriptions = null;
+  links.forEach((link) => {
+    let url;
+    try {
+      url = new URL(link.getAttribute('href'), window.location.origin);
+    } catch (err) {
+      return;
+    }
+    if (url.origin !== window.location.origin) return;
+    const parts = url.pathname.split('/').filter(Boolean);
+    if (parts.length < 2) return;
+    if (parts[1] !== 'subscriptions' && parts[1] !== 'subscribers') return;
+    if (!username) username = parts[0];
+    const count = parseCountFromText(link.textContent || '');
+    if (count === null) return;
+    if (parts[1] === 'subscriptions') subscriptions = count;
+    if (parts[1] === 'subscribers') subscribers = count;
+  });
+  if (!username) return null;
+  const counts = {};
+  if (typeof subscribers === 'number') counts.subscribers = subscribers;
+  if (typeof subscriptions === 'number') counts.subscriptions = subscriptions;
+  if (Object.keys(counts).length === 0) return null;
+  return { username, counts };
 }
 
 function logBlockReason(details) {
@@ -277,6 +320,15 @@ function buildStoreMaps() {
       commentIdToUserId.set(String(comment.id), String(comment.user_id));
     });
   });
+  const statsCounts = extractStatsCounts();
+  if (statsCounts) {
+    const key = normalizeUsername(statsCounts.username);
+    const user = key ? usernameToUser.get(key) : null;
+    if (user) {
+      if (!user.counts) user.counts = {};
+      Object.assign(user.counts, statsCounts.counts);
+    }
+  }
   return {
     commentIdToUserId,
     userIdToDisplayName,
