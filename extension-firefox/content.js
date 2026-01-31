@@ -21,6 +21,7 @@ const displayNameCache = new Map();
 const displayNamePending = new Map();
 const userCache = new Map();
 const userPending = new Map();
+const profileCountsPending = new Map();
 const commentInfoCache = new Map();
 const commentInfoPending = new Map();
 
@@ -99,8 +100,9 @@ function parseCountFromText(text) {
   return Number.isNaN(value) ? null : value;
 }
 
-function extractStatsCounts() {
-  const stats = document.querySelector('.stats');
+function extractStatsCountsFromRoot(root) {
+  if (!root) return null;
+  const stats = root.querySelector ? root.querySelector('.stats') : null;
   if (!stats) return null;
   const links = Array.from(stats.querySelectorAll('.stats-item a[href]'));
   let username = null;
@@ -120,9 +122,7 @@ function extractStatsCounts() {
     if (!username) username = parts[0];
     const text = link.textContent || '';
     let count = parseCountFromText(text);
-    if (count === null && !/\\d/.test(text)) {
-      count = 0;
-    }
+    if (count === null && !/\\d/.test(text)) count = 0;
     if (count === null) return;
     if (parts[1] === 'subscriptions') subscriptions = count;
     if (parts[1] === 'subscribers') subscribers = count;
@@ -133,6 +133,49 @@ function extractStatsCounts() {
   if (typeof subscriptions === 'number') counts.subscriptions = subscriptions;
   if (Object.keys(counts).length === 0) return null;
   return { username, counts };
+}
+
+function extractStatsCounts() {
+  return extractStatsCountsFromRoot(document);
+}
+
+function hasBotCounts(user) {
+  if (!user || !user.counts) return false;
+  const subscribers = getCountValue(user.counts, ['subscribers', 'subscribers_count', 'subscriber_count']);
+  const subscriptions = getCountValue(user.counts, ['subscriptions', 'subscriptions_count', 'subscription_count']);
+  return subscribers !== null && subscriptions !== null;
+}
+
+function fetchProfileCountsForUsername(username) {
+  const normalizedUsername = normalizeUsername(username);
+  if (!normalizedUsername) return Promise.resolve(null);
+  if (profileCountsPending.has(normalizedUsername)) {
+    return profileCountsPending.get(normalizedUsername);
+  }
+  const request = fetch(new URL(`/${encodeURIComponent(normalizedUsername)}`, getApiOrigin()), {
+    credentials: 'same-origin',
+    headers: { Accept: 'text/html' },
+  })
+    .then((resp) => (resp.ok ? resp.text() : null))
+    .then((html) => {
+      if (!html) return null;
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const statsCounts = extractStatsCountsFromRoot(doc);
+      if (!statsCounts) return null;
+      const key = normalizeUsername(statsCounts.username);
+      if (!key) return null;
+      const user = userCache.get(key) || { name: key };
+      if (!user.counts) user.counts = {};
+      Object.assign(user.counts, statsCounts.counts);
+      userCache.set(key, user);
+      return user;
+    })
+    .catch(() => null)
+    .finally(() => {
+      profileCountsPending.delete(normalizedUsername);
+    });
+  profileCountsPending.set(normalizedUsername, request);
+  return request;
 }
 
 function logBlockReason(details) {
@@ -201,6 +244,9 @@ function fetchUserForUsername(username) {
     .then((data) => {
       const user = data && (data.user || data);
       cacheUser(normalizedUsername, user || null);
+      if (user && blockBotsByDefault && !hasBotCounts(user)) {
+        fetchProfileCountsForUsername(normalizedUsername);
+      }
       return userCache.get(normalizedUsername);
     })
     .catch(() => {
@@ -499,8 +545,13 @@ function applyBlocklistToComments(root) {
     let botUser = userRecord;
     if (!botUser && normalizedUsername && userCache.has(normalizedUsername)) {
       botUser = userCache.get(normalizedUsername);
-    } else if (!botUser && normalizedUsername && blockBotsByDefault && !userPending.has(normalizedUsername)) {
-      fetchUserForUsername(normalizedUsername).then(() => applyBlocklistToComments(commentEl));
+    }
+    if (blockBotsByDefault && normalizedUsername) {
+      if (!botUser && !userPending.has(normalizedUsername)) {
+        fetchUserForUsername(normalizedUsername).then(() => applyBlocklistToComments(commentEl));
+      } else if (botUser && !hasBotCounts(botUser) && !profileCountsPending.has(normalizedUsername)) {
+        fetchProfileCountsForUsername(normalizedUsername).then(() => applyBlocklistToComments(commentEl));
+      }
     }
     if (blockBotsByDefault && isBotUser(botUser)) reasons.push('bot rule');
     const shouldHide = reasons.length > 0;
