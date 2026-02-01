@@ -847,8 +847,8 @@ function loadBlocklist() {
         autoMapUsernames = result[AUTO_MAP_KEY] === undefined ? true : Boolean(result[AUTO_MAP_KEY]);
         blockBotsByDefault = result[BLOCK_BOTS_KEY] === undefined ? true : Boolean(result[BLOCK_BOTS_KEY]);
         persistBotUsers = result[PERSIST_BOTS_KEY] === undefined ? false : Boolean(result[PERSIST_BOTS_KEY]);
-        resolve();
       }
+      resolve();
     }
   );
     if (maybePromise && typeof maybePromise.then === 'function') {
