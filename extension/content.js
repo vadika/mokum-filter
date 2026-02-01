@@ -798,17 +798,18 @@ function filterLikesList(root, maps) {
     if (removedAny) {
       const remainingLinks = Array.from(list.querySelectorAll('a[href]'));
       const otherButton = buttons.find((btn) => list.contains(btn)) || null;
-      const parts = remainingLinks.map((link) => link.outerHTML);
-      let joined = parts.length ? parts.join(', ') : '';
+      list.textContent = '';
+      remainingLinks.forEach((link, index) => {
+        if (index > 0) list.appendChild(document.createTextNode(', '));
+        list.appendChild(link);
+      });
       if (otherButton) {
-        const buttonHtml = otherButton.outerHTML;
-        if (joined) {
-          joined += `, and ${buttonHtml}`;
-        } else {
-          joined = `${buttonHtml}`;
+        if (remainingLinks.length > 0) {
+          list.appendChild(document.createTextNode(', and '));
         }
+        list.appendChild(otherButton);
       }
-      list.innerHTML = `${joined}${likedSuffix}`;
+      list.appendChild(document.createTextNode(likedSuffix));
     }
   });
 }
