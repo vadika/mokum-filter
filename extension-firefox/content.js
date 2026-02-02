@@ -834,6 +834,11 @@ function filterLikesList(root, maps) {
       if (!isUserPath(url.pathname)) return;
       const username = url.pathname.slice(1);
       const normalizedUsername = normalizeUsername(username);
+      if (normalizedUsername && whitelistedUsers.has(normalizedUsername)) {
+        link.style.display = '';
+        link.dataset.mokumHiddenLike = '';
+        return;
+      }
       let displayName = null;
       if (maps && username) {
         displayName = maps.usernameToDisplayName.get(String(username).toLowerCase()) || null;
@@ -843,10 +848,18 @@ function filterLikesList(root, maps) {
       if (maps && username) {
         userRecord = maps.usernameToUser.get(String(username).toLowerCase()) || null;
       }
-      const shouldHide =
-        (normalizedUsername && blockedUsers.has(normalizedUsername)) ||
-        (normalizedDisplayName && blockedDisplayNames.has(normalizedDisplayName)) ||
-        (blockBotsByDefault && isBotUser(userRecord));
+      const reasons = [];
+      if (normalizedUsername && blockedUsers.has(normalizedUsername)) reasons.push('blocked username');
+      if (normalizedDisplayName && blockedDisplayNames.has(normalizedDisplayName)) reasons.push('blocked display name');
+      if (filterByCreatedAt && normalizedUsername) {
+        const cutoffValue = parseDateValue(createdAtCutoff);
+        const createdAtValue = userRecord ? parseDateValue(userRecord.created_at) : null;
+        if (cutoffValue !== null && createdAtValue !== null && createdAtValue > cutoffValue) {
+          reasons.push('account date');
+        }
+      }
+      if (blockBotsByDefault && isBotUser(userRecord)) reasons.push('bot rule');
+      const shouldHide = reasons.length > 0;
       if (!shouldHide) return;
       link.style.display = 'none';
       link.dataset.mokumHiddenLike = 'true';
