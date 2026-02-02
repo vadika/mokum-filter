@@ -86,3 +86,14 @@ jobs:
           files: |
             extension.zip
             extension-firefox.zip
+
+      - name: Upload to Chrome Web Store
+        if: steps.version.outputs.changed == 'true'
+        uses: mnao305/chrome-extension-upload@v5.0.0
+        with:
+          file-path: extension.zip
+          extension-id: ${{ secrets.CWS_EXTENSION_ID }}
+          client-id: ${{ secrets.CWS_CLIENT_ID }}
+          client-secret: ${{ secrets.CWS_CLIENT_SECRET }}
+          refresh-token: ${{ secrets.CWS_REFRESH_TOKEN }}
+          publish: true
