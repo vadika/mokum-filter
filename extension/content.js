@@ -766,6 +766,8 @@ function filterLikesList(root, maps) {
     const likedTextMatch = list.textContent.match(/liked this.*$/i);
     const likedSuffix = likedTextMatch ? ` ${likedTextMatch[0].trim()}` : ' liked this';
     let removedAny = false;
+    const visibleLinks = new Set(links);
+    const otherButton = buttons.find((btn) => list.contains(btn)) || null;
     links.forEach((link) => {
       let url;
       try {
@@ -792,24 +794,26 @@ function filterLikesList(root, maps) {
       if (blockBotsByDefault && isBotUser(userRecord)) reasons.push('bot rule');
       const shouldHide = reasons.length > 0;
       if (!shouldHide) return;
-      link.remove();
+      link.style.display = 'none';
+      link.dataset.mokumHiddenLike = 'true';
+      visibleLinks.delete(link);
+      const prev = link.previousSibling;
+      if (prev && prev.nodeType === Node.TEXT_NODE) {
+        prev.textContent = prev.textContent.replace(/,\s*$/g, '').replace(/\s+$/g, '');
+      }
+      const next = link.nextSibling;
+      if (next && next.nodeType === Node.TEXT_NODE) {
+        next.textContent = next.textContent.replace(/^\s*,\s*/g, '').replace(/^\s*and\s+/i, '');
+      }
       removedAny = true;
     });
-    if (removedAny) {
-      const remainingLinks = Array.from(list.querySelectorAll('a[href]'));
-      const otherButton = buttons.find((btn) => list.contains(btn)) || null;
-      list.textContent = '';
-      remainingLinks.forEach((link, index) => {
-        if (index > 0) list.appendChild(document.createTextNode(', '));
-        list.appendChild(link);
-      });
-      if (otherButton) {
-        if (remainingLinks.length > 0) {
-          list.appendChild(document.createTextNode(', and '));
-        }
-        list.appendChild(otherButton);
+    if (removedAny && otherButton && visibleLinks.size === 0) {
+      const remainingLinks = Array.from(visibleLinks).filter((link) => list.contains(link));
+      if (remainingLinks.length !== 0) return;
+      const prev = otherButton.previousSibling;
+      if (prev && prev.nodeType === Node.TEXT_NODE) {
+        prev.textContent = prev.textContent.replace(/\s*,?\s*and\s*$/i, '').replace(/,\s*$/g, '');
       }
-      list.appendChild(document.createTextNode(likedSuffix));
     }
   });
 }
