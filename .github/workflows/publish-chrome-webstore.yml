@@ -24,7 +24,7 @@ jobs:
           (cd extension && zip -r ../extension.zip .)
 
       - name: Upload to Chrome Web Store
-        uses: mnao305/chrome-extension-upload@v3
+        uses: mnao305/chrome-extension-upload@main
         with:
           file-path: extension.zip
           extension-id: ${{ secrets.CWS_EXTENSION_ID }}
