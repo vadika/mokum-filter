@@ -7,6 +7,9 @@ const DISPLAY_BLOCKLIST_KEY = 'blockedDisplayNames';
 const AUTO_MAP_KEY = 'autoMapUsernames';
 const BLOCK_BOTS_KEY = 'blockBotsByDefault';
 const PERSIST_BOTS_KEY = 'persistBotUsers';
+const CREATED_AT_FILTER_KEY = 'filterByCreatedAt';
+const CREATED_AT_DATE_KEY = 'createdAtCutoff';
+const CREATED_AT_PERSIST_KEY = 'persistCreatedAtBlock';
 const HIDDEN_CLASS = 'mokum-comment-filter-hidden';
 const COMMENT_SELECTOR = '.bem-post__comment';
 const COMMENT_REST_SELECTOR = '.bem-post__comment-rest';
@@ -19,6 +22,9 @@ let blockedDisplayNames = new Set();
 let autoMapUsernames = false;
 let blockBotsByDefault = true;
 let persistBotUsers = false;
+let filterByCreatedAt = true;
+let createdAtCutoff = '2026-01-01';
+let persistCreatedAt = false;
 let notifyTimer = null;
 let applyTimer = null;
 let reapplyTimer = null;
@@ -45,6 +51,37 @@ function normalizeUsername(value) {
 function normalizeDisplayName(value) {
   if (!value) return '';
   return value.trim().toLowerCase();
+}
+
+function normalizeCreatedAtInput(value) {
+  const raw = (value || '').trim();
+  if (!raw) return '2026-01-01';
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) {
+    return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+  }
+  const usMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (usMatch) {
+    const mm = String(usMatch[1]).padStart(2, '0');
+    const dd = String(usMatch[2]).padStart(2, '0');
+    return `${usMatch[3]}-${mm}-${dd}`;
+  }
+  return '2026-01-01';
+}
+
+function parseDateValue(value) {
+  if (!value) return null;
+  const isoMatch = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const year = Number(isoMatch[1]);
+    const month = Number(isoMatch[2]);
+    const day = Number(isoMatch[3]);
+    if (!year || !month || !day) return null;
+    return Date.UTC(year, month - 1, day);
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 }
 
 function cacheDisplayName(username, displayName) {
@@ -722,6 +759,15 @@ function applyBlocklistToComments(root) {
         }
       }
     }
+    if (filterByCreatedAt && normalizedUsername) {
+      const cutoffValue = parseDateValue(createdAtCutoff);
+      const createdAtValue = botUser ? parseDateValue(botUser.created_at) : null;
+      if (cutoffValue !== null && createdAtValue !== null && createdAtValue > cutoffValue) {
+        reasons.push('account date');
+      } else if (!createdAtValue && isCommentVisible(commentEl)) {
+        fetchUserForUsername(normalizedUsername).then(() => scheduleReapply(commentEl));
+      }
+    }
     if (blockBotsByDefault && isBotUser(botUser)) reasons.push('bot rule');
     const shouldHide = reasons.length > 0;
     commentEl.classList.toggle(HIDDEN_CLASS, shouldHide);
@@ -749,6 +795,15 @@ function applyBlocklistToComments(root) {
       normalizedUsername &&
       !blockedUsers.has(normalizedUsername) &&
       reasons.includes('bot rule')
+    ) {
+      addUsernameToBlocklist(normalizedUsername);
+    }
+    if (
+      shouldHide &&
+      persistCreatedAt &&
+      normalizedUsername &&
+      !blockedUsers.has(normalizedUsername) &&
+      reasons.includes('account date')
     ) {
       addUsernameToBlocklist(normalizedUsername);
     }
@@ -836,7 +891,17 @@ function scheduleBlockedCountUpdate() {
 function loadBlocklist() {
   return new Promise((resolve) => {
   const maybePromise = storage.get(
-    [BLOCKLIST_KEY, WHITELIST_KEY, DISPLAY_BLOCKLIST_KEY, AUTO_MAP_KEY, BLOCK_BOTS_KEY, PERSIST_BOTS_KEY],
+    [
+      BLOCKLIST_KEY,
+      WHITELIST_KEY,
+      DISPLAY_BLOCKLIST_KEY,
+      AUTO_MAP_KEY,
+      BLOCK_BOTS_KEY,
+      PERSIST_BOTS_KEY,
+      CREATED_AT_FILTER_KEY,
+      CREATED_AT_DATE_KEY,
+      CREATED_AT_PERSIST_KEY
+    ],
     (result) => {
       if (result) {
         const list = Array.isArray(result[BLOCKLIST_KEY]) ? result[BLOCKLIST_KEY] : [];
@@ -848,6 +913,11 @@ function loadBlocklist() {
         autoMapUsernames = result[AUTO_MAP_KEY] === undefined ? true : Boolean(result[AUTO_MAP_KEY]);
         blockBotsByDefault = result[BLOCK_BOTS_KEY] === undefined ? true : Boolean(result[BLOCK_BOTS_KEY]);
         persistBotUsers = result[PERSIST_BOTS_KEY] === undefined ? false : Boolean(result[PERSIST_BOTS_KEY]);
+        filterByCreatedAt =
+          result[CREATED_AT_FILTER_KEY] === undefined ? true : Boolean(result[CREATED_AT_FILTER_KEY]);
+        createdAtCutoff = normalizeCreatedAtInput(result[CREATED_AT_DATE_KEY]);
+        persistCreatedAt =
+          result[CREATED_AT_PERSIST_KEY] === undefined ? false : Boolean(result[CREATED_AT_PERSIST_KEY]);
       }
       resolve();
     }
@@ -863,6 +933,11 @@ function loadBlocklist() {
         autoMapUsernames = result[AUTO_MAP_KEY] === undefined ? true : Boolean(result[AUTO_MAP_KEY]);
         blockBotsByDefault = result[BLOCK_BOTS_KEY] === undefined ? true : Boolean(result[BLOCK_BOTS_KEY]);
         persistBotUsers = result[PERSIST_BOTS_KEY] === undefined ? false : Boolean(result[PERSIST_BOTS_KEY]);
+        filterByCreatedAt =
+          result[CREATED_AT_FILTER_KEY] === undefined ? true : Boolean(result[CREATED_AT_FILTER_KEY]);
+        createdAtCutoff = normalizeCreatedAtInput(result[CREATED_AT_DATE_KEY]);
+        persistCreatedAt =
+          result[CREATED_AT_PERSIST_KEY] === undefined ? false : Boolean(result[CREATED_AT_PERSIST_KEY]);
         resolve();
       });
     }
@@ -992,6 +1067,15 @@ function init() {
     }
     if (changes[PERSIST_BOTS_KEY]) {
       persistBotUsers = Boolean(changes[PERSIST_BOTS_KEY].newValue);
+    }
+    if (changes[CREATED_AT_FILTER_KEY]) {
+      filterByCreatedAt = Boolean(changes[CREATED_AT_FILTER_KEY].newValue);
+    }
+    if (changes[CREATED_AT_DATE_KEY]) {
+      createdAtCutoff = normalizeCreatedAtInput(changes[CREATED_AT_DATE_KEY].newValue);
+    }
+    if (changes[CREATED_AT_PERSIST_KEY]) {
+      persistCreatedAt = Boolean(changes[CREATED_AT_PERSIST_KEY].newValue);
     }
     applyBlocklistToComments(document);
   });

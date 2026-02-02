@@ -71,6 +71,19 @@
         Add bot users to permanent block list
       </label>
     </div>
+    <div class="row" style="margin-top:16px;">
+      <label>
+        <input type="checkbox" id="filterByCreatedAt">
+        Filter accounts created after
+      </label>
+      <input type="text" id="createdAtDate" placeholder="01/01/2026" style="margin-left:8px;width:140px;">
+    </div>
+    <div class="row">
+      <label>
+        <input type="checkbox" id="persistCreatedAt">
+        Add users filtered by account date to permanent block list
+      </label>
+    </div>
     <div class="row">
       <button id="save">Save</button>
       <span id="status" aria-live="polite"></span>
